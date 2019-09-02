@@ -24,6 +24,39 @@ def loadAndProcessImage(image_path):
     x = x.reshape((1, x.shape[0], x.shape[1], 1))
     return x
 
+def saveFilterMean(image_path, layer_number, model, output_class):
+    # This is the entry in the prediction vector we want to examine
+    if( output_class == "0" ):
+        pred_vector_output = 1 - model.layers[len(model.layers) - 2].output[:,0]
+    else:
+        pred_vector_output = model.layers[len(model.layers) - 2].output[:,0]
+
+    # Loaded and processed image
+    x = loadAndProcessImage(image_path)
+
+    # It is the output feature map of one of the conv layers we want to visualize
+    conv_layer = model.layers[layer_number].output
+
+    # This is the gradient of the predicted vector output w.r.t. the output feature map of the selected conv layer
+    grads = K.gradients(pred_vector_output, conv_layer)[0]
+
+    # This i vector of shape (# of channels, ), where each entry is the mean intensity of the gradient over a specific feature map channel
+    pooled_grads = K.mean(grads, axis=(0, 1, 2))
+
+    # This function allows us to access the values of the quantities we just defined:
+    # `pooled_grads` and the output feature map of `block5_conv3`,
+    # given a sample image
+    iterate = K.function([model.input], [pooled_grads, conv_layer[0]])
+
+    # These are the values of these two quantities, as Numpy arrays,
+    # given our sample image of two elephants
+    pooled_grads_value, conv_layer_output_value = iterate([x])
+
+    # The channel-wise mean of the resulting feature map
+    # is our heatmap of class activation
+    filterMean = np.mean(conv_layer_output_value, axis=-1)
+    plt.imsave(output_path + '/' + image_names[i] + '/layer' + str(j) + 'mean.jpg', filterMean, cmap='gray')
+
 def createHeatmap(image_path, layer_number, model, output_class):
     # This is the entry in the prediction vector we want to examine
     if( output_class == "0" ):
@@ -125,4 +158,5 @@ for i in range(len(image_names)): # For all images
     for j in range(len(model.layers)):
         if(model.layers[j].__class__.__name__ == 'Conv2D'): # For all conv layers
             heatmap = createHeatmap(image_path, j, model, args["class"]) # heatmap of the image
+            saveFilterMean(image_path, j, model, args["class"])
             saveHeatmapImage(image_path, heatmap, output_path + '/' + image_names[i] + '/layer' + str(j) + '.jpg')
