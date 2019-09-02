@@ -30,7 +30,6 @@ def loadAndProcessImage(image_path):
 def createHeatmap(image_path, layer_number, model, output_class):
     # This is the entry in the prediction vector we want to examine
     if( output_class == "0" ):
-        print('negative')
         pred_vector_output = 1 - model.layers[len(model.layers) - 2].output[:,0]
     else:
         pred_vector_output = model.layers[len(model.layers) - 2].output[:,0]
