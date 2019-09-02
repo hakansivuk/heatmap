@@ -27,9 +27,12 @@ def loadAndProcessImage(image_path):
     x = x.reshape((1, x.shape[0], x.shape[1], 1))
     return x
 
-def createHeatmap(image_path, layer_number, model):
+def createHeatmap(image_path, layer_number, model, output_class):
     # This is the entry in the prediction vector we want to examine
-    pred_vector_output = model.layers[len(model.layers) - 2].output[:,0]
+    if( output_class == 0 ):
+        pred_vector_output = 1 - model.layers[len(model.layers) - 2].output[:,0]
+    else:
+        pred_vector_output = model.layers[len(model.layers) - 2].output[:,0]
 
     # Loaded and processed image
     x = loadAndProcessImage(image_path)
@@ -93,6 +96,8 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-m", "--model", required=True, help="name of the hdf5 file")
 # Adding an argument for the path to dataset
 ap.add_argument("-d", "--dataset", required=True, help="path to dataset we use")
+# Adding an argument to set class to positive or negative
+ap.add_argument("-c", "--class", required=True, help="which class do we want to check")
 
 args = vars(ap.parse_args())
 
@@ -110,14 +115,13 @@ if not os.path.exists(output_path):
 # Finding image paths from the dataset file
 dataset_file_path = os.getcwd() + '/' + args["dataset"] + '/'
 image_names = findImageFiles(dataset_file_path)
+output_class = args["class"]
 
-for i in range(len(model.layers)):
-    if(model.layers[i].__class__.__name__ == 'Conv2D'): # For all conv layers
-        # Creating a folder for that conv layer
-        if not os.path.exists(output_path + "/conv2d_layer" + str(i)):
-            os.mkdir(output_path + "/conv2d_layer" + str(i))
-
-        for j in range(len(image_names)): # For all images
-            image_path = dataset_file_path + image_names[j] 
-            heatmap = createHeatmap(image_path, i, model) # heatmap of the image
-            saveHeatmapImage(image_path, heatmap, output_path + '/conv2d_layer' + str(i) + '/' + image_names[j] + '.jpg')     
+for i in range(len(image_names)): # For all images
+    if not os.path.exists(output_path + "/" + image_names[i]):
+        os.mkdir(output_path + "/" + image_names[i])
+    image_path = dataset_file_path + image_names[i]
+    for j in range(len(model.layers)):
+        if(model.layers[j].__class__.__name__ == 'Conv2D'): # For all conv layers
+            heatmap = createHeatmap(image_path, j, model, output_class) # heatmap of the image
+            saveHeatmapImage(image_path, heatmap, output_path + '/' + image_names[i] + '/layer' + str(j) + '.jpg')
