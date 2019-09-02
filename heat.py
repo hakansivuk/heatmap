@@ -29,7 +29,8 @@ def loadAndProcessImage(image_path):
 
 def createHeatmap(image_path, layer_number, model, output_class):
     # This is the entry in the prediction vector we want to examine
-    if( output_class == 0 ):
+    if( output_class == "0" ):
+        print('negative')
         pred_vector_output = 1 - model.layers[len(model.layers) - 2].output[:,0]
     else:
         pred_vector_output = model.layers[len(model.layers) - 2].output[:,0]
@@ -108,20 +109,24 @@ model.summary()
 # Setting the intensity factor
 intensity_factor = 0.4
 
-output_path = "heatmaps_" + args["dataset"]
+if(args["class"] == "1"):
+    output_path = "heatmaps_" + args["dataset"] + "_positive"
+else:
+    output_path = "heatmaps_" + args["dataset"] + "_negative"
 if not os.path.exists(output_path):
     os.mkdir(output_path)
 
 # Finding image paths from the dataset file
 dataset_file_path = os.getcwd() + '/' + args["dataset"] + '/'
 image_names = findImageFiles(dataset_file_path)
-output_class = args["class"]
 
 for i in range(len(image_names)): # For all images
     if not os.path.exists(output_path + "/" + image_names[i]):
         os.mkdir(output_path + "/" + image_names[i])
     image_path = dataset_file_path + image_names[i]
+    original_image = cv2.imread(image_path)
+    cv2.imwrite(output_path + '/' + image_names[i] + '/_original.jpg', original_image)
     for j in range(len(model.layers)):
         if(model.layers[j].__class__.__name__ == 'Conv2D'): # For all conv layers
-            heatmap = createHeatmap(image_path, j, model, output_class) # heatmap of the image
+            heatmap = createHeatmap(image_path, j, model, args["class"]) # heatmap of the image
             saveHeatmapImage(image_path, heatmap, output_path + '/' + image_names[i] + '/layer' + str(j) + '.jpg')
