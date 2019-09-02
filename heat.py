@@ -5,73 +5,124 @@ import numpy as np
 from matplotlib import pyplot as plt
 import cv2
 from keras.models import load_model
+import argparse
+import os
 
-# Note that we are including the densely-connected classifier on top;
-# all previous times, we were discarding it.
-model = load_model('weights-from_scratch-47-1.00.hdf5')
-model.summary()
-# The local path to our target image
-img_path = '_ (12).png'
 
-# `img` is a PIL image
-img = image.load_img(img_path, color_mode='grayscale')
+def findImageFiles(path):
+    all_paths = os.listdir(path)
+    image_paths = []
+    for i in range(len(all_paths)):
+        if(all_paths[i].lower().endswith(('.png'))):
+            image_paths.append(all_paths[i])
+    return image_paths
 
-# `x` is a float32 Numpy array of shape (160, 256, 1)
-x = image.img_to_array(img)
-x = x.astype('float32') / 255
-# We add a dimension to transform our array into a "batch"
-# of size (1, 160, 256, 1)
-x = x.reshape((1,160,256,1))
-# This is the entry in the prediction vector
-pred_vector_output = model.layers[18].output[:,0]
-int_layer = 10
-# The is the output feature map of the given layer
-some_conv_layer = model.layers[int_layer].output
+def loadAndProcessImage(image_path):
+    img = image.load_img(image_path, color_mode='grayscale')
+    x = image.img_to_array(img)
+    x = x.astype('float32') / 255
+    x = x.reshape((1, x.shape[0], x.shape[1], 1))
+    return x
 
-# This is the gradient of the predicted class with regard to
-# the output feature map of selected block
-grads = K.gradients(pred_vector_output, some_conv_layer)[0]
+def createHeatmap(image_path, layer_number, model, output_class):
+    # This is the entry in the prediction vector we want to examine
+    if( output_class == "0" ):
+        pred_vector_output = 1 - model.layers[len(model.layers) - 2].output[:,0]
+    else:
+        pred_vector_output = model.layers[len(model.layers) - 2].output[:,0]
 
-# This is a vector of shape (512,), where each entry
-# is the mean intensity of the gradient over a specific feature map channel
-pooled_grads = K.mean(grads, axis=(0, 1, 2))
+    # Loaded and processed image
+    x = loadAndProcessImage(image_path)
 
-# This function allows us to access the values of the quantities we just defined:
-# `pooled_grads` and the output feature map of `block5_conv3`,
-# given a sample image
-iterate = K.function([model.input], [pooled_grads, some_conv_layer[0]])
+    # It is the output feature map of one of the conv layers we want to visualize
+    conv_layer = model.layers[layer_number].output
 
-# These are the values of these two quantities, as Numpy arrays,
-# given our sample image of two elephants
-pooled_grads_value, conv_layer_output_value = iterate([x])
+    # This is the gradient of the predicted vector output w.r.t. the output feature map of the selected conv layer
+    grads = K.gradients(pred_vector_output, conv_layer)[0]
 
-# We multiply each channel in the feature map array
-# by "how important this channel is" with regard to the elephant class
-for i in range(model.layers[int_layer].output_shape[-1]):
-    conv_layer_output_value[:, :, i] *= pooled_grads_value[i]
+    # This i vector of shape (# of channels, ), where each entry is the mean intensity of the gradient over a specific feature map channel
+    pooled_grads = K.mean(grads, axis=(0, 1, 2))
 
-# The channel-wise mean of the resulting feature map
-# is our heatmap of class activation
-heatmap = np.mean(conv_layer_output_value, axis=-1)
+    # This function allows us to access the values of the quantities we just defined:
+    # `pooled_grads` and the output feature map of `block5_conv3`,
+    # given a sample image
+    iterate = K.function([model.input], [pooled_grads, conv_layer[0]])
 
-print(heatmap)
-# We use cv2 to load the original image
-img = cv2.imread(img_path)
+    # These are the values of these two quantities, as Numpy arrays,
+    # given our sample image of two elephants
+    pooled_grads_value, conv_layer_output_value = iterate([x])
 
-img_heatmap = np.maximum(heatmap, 0)
-img_heatmap /= np.max(img_heatmap)
+    # We multiply each channel in the feature map array
+    # by "how important this channel is" with regard to the elephant class
+    for i in range(model.layers[layer_number].output_shape[-1]):
+        conv_layer_output_value[:, :, i] *= pooled_grads_value[i]
     
-# We resize the heatmap to have the same size as the original image
-img_hm = cv2.resize(img_heatmap, (img.shape[1], img.shape[0]))
+    # The channel-wise mean of the resulting feature map
+    # is our heatmap of class activation
+    heatmap = np.mean(conv_layer_output_value, axis=-1)
 
-# We convert the heatmap to RGB
-img_hm = np.uint8(255 * img_hm)
+    return heatmap
 
-# We apply the heatmap to the original image
-img_hm = cv2.applyColorMap(img_hm, cv2.COLORMAP_JET)
+def saveHeatmapImage(image_path, heatmap, saveas):
+    # Loading the image
+    img = cv2.imread(image_path)
 
-# 0.4 here is a heatmap intensity factor
-superimposed_img = img_hm * 0.4 + img
+    img_heatmap = np.maximum(heatmap, 0)
+    img_heatmap /= np.max(img_heatmap)
+        
+    # We resize the heatmap to have the same size as the original image
+    img_hm = cv2.resize(img_heatmap, (img.shape[1], img.shape[0]))
 
-# Save the image to disk
-cv2.imwrite('./12_{}.jpg'.format('heatmap'), superimposed_img)
+    # We convert the heatmap to RGB
+    img_hm = np.uint8(255 * img_hm)
+
+    # We apply the heatmap to the original image
+    img_hm = cv2.applyColorMap(img_hm, cv2.COLORMAP_JET)
+
+    # 0.4 here is a heatmap intensity factor
+    superimposed_img = img_hm * intensity_factor + img
+
+    # Save the image to disk
+    cv2.imwrite(saveas, superimposed_img)
+
+
+# Constructing the argument parser
+ap = argparse.ArgumentParser()
+
+# Adding an argument for the file which we load the model
+ap.add_argument("-m", "--model", required=True, help="name of the hdf5 file")
+# Adding an argument for the path to dataset
+ap.add_argument("-d", "--dataset", required=True, help="path to dataset we use")
+# Adding an argument to set class to positive or negative
+ap.add_argument("-c", "--class", required=True, help="which class do we want to check")
+
+args = vars(ap.parse_args())
+
+# Loading the model
+model = load_model(args["model"])
+model.summary()
+
+# Setting the intensity factor
+intensity_factor = 0.4
+
+if(args["class"] == "1"):
+    output_path = "heatmaps_" + args["dataset"] + "_positive"
+else:
+    output_path = "heatmaps_" + args["dataset"] + "_negative"
+if not os.path.exists(output_path):
+    os.mkdir(output_path)
+
+# Finding image paths from the dataset file
+dataset_file_path = os.getcwd() + '/' + args["dataset"] + '/'
+image_names = findImageFiles(dataset_file_path)
+
+for i in range(len(image_names)): # For all images
+    if not os.path.exists(output_path + "/" + image_names[i]):
+        os.mkdir(output_path + "/" + image_names[i])
+    image_path = dataset_file_path + image_names[i]
+    original_image = cv2.imread(image_path)
+    cv2.imwrite(output_path + '/' + image_names[i] + '/_original.jpg', original_image)
+    for j in range(len(model.layers)):
+        if(model.layers[j].__class__.__name__ == 'Conv2D'): # For all conv layers
+            heatmap = createHeatmap(image_path, j, model, args["class"]) # heatmap of the image
+            saveHeatmapImage(image_path, heatmap, output_path + '/' + image_names[i] + '/layer' + str(j) + '.jpg')
