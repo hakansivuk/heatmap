@@ -103,8 +103,9 @@ model.summary()
 # Setting the intensity factor
 intensity_factor = 0.4
 
-if not os.path.exists("heatmaps"):
-    os.mkdir("heatmaps")
+output_path = "heatmaps_" + args["dataset"]
+if not os.path.exists(output_path):
+    os.mkdir(output_path)
 
 # Finding image paths from the dataset file
 dataset_file_path = os.getcwd() + '/' + args["dataset"] + '/'
@@ -113,10 +114,10 @@ image_names = findImageFiles(dataset_file_path)
 for i in range(len(model.layers)):
     if(model.layers[i].__class__.__name__ == 'Conv2D'): # For all conv layers
         # Creating a folder for that conv layer
-        if not os.path.exists("heatmaps/conv2d_layer" + str(i)):
-            os.mkdir("heatmaps/conv2d_layer" + str(i))
+        if not os.path.exists(output_path + "/conv2d_layer" + str(i)):
+            os.mkdir(output_path + "/conv2d_layer" + str(i))
 
         for j in range(len(image_names)): # For all images
             image_path = dataset_file_path + image_names[j] 
             heatmap = createHeatmap(image_path, i, model) # heatmap of the image
-            saveHeatmapImage(image_path, heatmap, 'heatmaps/conv2d_layer' + str(i) + '/' + image_names[j] + '.jpg')     
+            saveHeatmapImage(image_path, heatmap, output_path + '/conv2d_layer' + str(i) + '/' + image_names[j] + '.jpg')     
