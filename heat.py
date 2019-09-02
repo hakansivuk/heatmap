@@ -7,9 +7,6 @@ import cv2
 from keras.models import load_model
 import argparse
 import os
-from PIL import Image as pimg
-import glob
-import imageio
 
 
 def findImageFiles(path):
